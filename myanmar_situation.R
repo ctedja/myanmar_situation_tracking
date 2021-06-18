@@ -6,7 +6,6 @@
 library(readxl)
 library(writexl)
 library(tidyverse)
-library(acled.api)
 library(sf)
 library(lubridate)
 library(xlsx)
@@ -28,6 +27,7 @@ geography <- read_sf("C:\\Users\\clinton.tedja\\OneDrive - World Food Programme\
   select(-c(source, source_id, source_dat, lst_update, rb))
 
 # Alternative API workflow
+#   library(acled.api)
 #   conflict <- GET("https://api.acleddata.com/acled/read/?key=nrSMy2xwZwCbaaMfXW2W&email=clinton.tedja@wfp.org&terms=accept&year=2021&country=Myanmar&limit=10000")
 
 #   conflict <- bind_rows(lapply(content(conflict)$data, as.data.frame))
@@ -220,10 +220,14 @@ joined <- bind_rows(joined, appended)
 pipeline <- read.csv('C:\\Users\\clinton.tedja\\OneDrive - World Food Programme\\Documents (OneDrive)\\Data\\Myanmar_Situation\\Pipeline.csv')
 
 # Dots for now
-opportunities <- read.csv('C:\\Users\\clinton.tedja\\OneDrive - World Food Programme\\Documents (OneDrive)\\Data\\Myanmar_Situation\\Opportunities_210617.csv')
+forecast <- read.csv('C:\\Users\\clinton.tedja\\OneDrive - World Food Programme\\Documents (OneDrive)\\Data\\Myanmar_Situation\\Opportunities_210617.csv')
+
+# Contributions by donor, Dots for now
+donors <- read.csv('C:\\Users\\clinton.tedja\\OneDrive - World Food Programme\\Documents (OneDrive)\\Data\\Myanmar_Situation\\Confirmed_Contributions.csv')
+rm(opportunities_donors)
 
 
-opportunities_forecast <- opportunities %>%
+forecast <- forecast %>%
   mutate(TDD = as.Date(TDD),
          TDD_month = floor_date(TDD, "months")) %>%
   filter(Country_Code == "MM",
@@ -234,25 +238,16 @@ opportunities_forecast <- opportunities %>%
 
 
 # Top donors
-opportunities_donors <- opportunities %>%
-  filter(Country_Code == "MM",
-         Stage_Of_Negotiation == "Closed Won",
-         Contribution_Year == "2021") %>%
-  arrange(desc(Total_Value_USD))
-
-
-opportunities_donors <- opportunities_donors %>%
+donors <- donors %>% 
+  filter(Recipient_Country_Code == "MM",
+         Contribution_Year == 2021) %>%
+  select(c(Confirmed_Contribution_USD, Top_Level_Donor_Name)) %>%
+  rename(Donor_Name = Top_Level_Donor_Name,
+         donor_usd = Confirmed_Contribution_USD) %>%
   group_by(Donor_Name) %>%
-  summarise(donor_usd = sum(Total_Value_USD)) %>%
+  summarise(donor_usd = sum(donor_usd)) %>%
   ungroup() %>%
   arrange(desc(donor_usd))
-
-
-
-
-# WHILE WE CHECK THE DONORS SOURCE, USE THIS
-opportunities_donors <- data.frame(Donor_Name = c("USA","Japan", "Australia",	"Switzerland", "European Union", "All Other Donors"), donor_usd = c(18000000, 7000000, 6604506, 3220272, 2409201, 5249684))
-
 
 
 # Funding figures
@@ -299,21 +294,20 @@ pipeline_latest <- pipeline_latest %>%
 
 pipeline_latest %>% filter(period == "2021-07-01",
                            transfer_modality == "Food") %>% 
-  select(c(transfer_modality, commodity, ip_total_usd, ip_total_mt, ip_shortfall_usd, ip_shortfall_mt, prepo, resourcing_non_fcr)) %>%
+  select(c(transfer_modality, commodity, ip_total_usd, ip_total_mt, ip_shortfall_usd, ip_shortfall_mt, resourcing_non_fcr)) %>%
   glimpse()
 
 
 
 # Join & Bind pt.2 ----
 # Bind all our budgeting figures
-budgeting <- bind_rows(pipeline_latest, opportunities_donors, opportunities_forecast)
+resourcing <- bind_rows(pipeline_latest, donors, forecast)
+
 
 # Bind all into one data frame
-final_joined <- bind_rows(joined, budgeting) 
+final_joined <- bind_rows(joined, resourcing) 
 
 glimpse(final_joined)
-
-
 
 
 
@@ -321,9 +315,6 @@ glimpse(final_joined)
 write_xlsx(as.data.frame(final_joined),
            'C:\\Users\\clinton.tedja\\OneDrive - World Food Programme\\Documents (OneDrive)\\Data\\Myanmar_Situation\\myanmar_situation_prepared_data.xlsx')
 
-max(conflict$event_date)
-
-glimpse(displaced)
 
 
 
