@@ -9,6 +9,9 @@ library(tidyverse)
 library(sf)
 library(lubridate)
 library(xlsx)
+library(acled.api)
+
+
 
 
 
@@ -16,10 +19,11 @@ library(xlsx)
 # Draw from the ACLED package API: https://CRAN.R-project.org/package=acled.api
 #   Currently a faster refresh than Dots, by two weeks, and allow manual manipulation for preparation
 conflict <- acled.api(email.address = "clinton.tedja@wfp.org",
-                      access.key = "____TOKEN_____",
+                      access.key = "___INSERTOKEN_____",
                       country = "Myanmar", 
                       start.date = "2021-01-01", 
                       end.date = Sys.Date())
+
 
 # Load the corporate shapefile
 geography <- read_sf("C:\\Users\\clinton.tedja\\OneDrive - World Food Programme\\Documents (OneDrive)\\Data\\rbb_adm2_may_2021\\adm2.shp") %>% 
@@ -86,8 +90,6 @@ conflict <- conflict %>%
 conflict <- rbind(conflict,
                   (conflict %>%
                      mutate(month_str = "Cumulative")))
-
-
 
 
 # _ b) Beneficiaries ----
@@ -217,24 +219,29 @@ joined <- bind_rows(joined, appended)
 # Added in a second phase of design; tidy and join below
 
 # Tableau Server file for now
-pipeline <- read.csv('C:\\Users\\clinton.tedja\\OneDrive - World Food Programme\\Documents (OneDrive)\\Data\\Myanmar_Situation\\Pipeline.csv')
+#pipeline <- read.csv('C:\\Users\\clinton.tedja\\OneDrive - World Food Programme\\Documents (OneDrive)\\Data\\Myanmar_Situation\\Pipeline.csv')
+
+pipeline <- read.csv('C:\\Users\\clinton.tedja\\OneDrive - World Food Programme\\Documents (OneDrive)\\Data\\Myanmar_Situation\\Pipeline_210622.csv')
 
 # Dots for now
 forecast <- read.csv('C:\\Users\\clinton.tedja\\OneDrive - World Food Programme\\Documents (OneDrive)\\Data\\Myanmar_Situation\\Opportunities_210617.csv')
 
 # Contributions by donor, Dots for now
 donors <- read.csv('C:\\Users\\clinton.tedja\\OneDrive - World Food Programme\\Documents (OneDrive)\\Data\\Myanmar_Situation\\Confirmed_Contributions.csv')
-rm(opportunities_donors)
+
 
 
 forecast <- forecast %>%
-  mutate(TDD = as.Date(TDD),
-         TDD_month = floor_date(TDD, "months")) %>%
   filter(Country_Code == "MM",
          Contribution_Year == "2021",
          Probability == "High" | Probability == "Medium",
-         Forecast_Or_Contribution == "Forecast") %>%
+         Forecast_Or_Contribution == "Forecast")%>%
   summarise(forecast = sum(Total_Value_USD))
+
+
+# Manual overwrite for June
+forecast <- data.frame(forecast = c("13700000"))
+
 
 
 # Top donors
@@ -250,9 +257,14 @@ donors <- donors %>%
   arrange(desc(donor_usd))
 
 
+#
+#
+#
+
 # Funding figures
 # Check dates of extracts
 unique(arrange(pipeline %>% mutate(data_extracted = as.Date(data_extracted, format = "%d/%m/%Y")), data_extracted)$data_extracted)
+
 
 
 # Generate the absolute latest
@@ -268,34 +280,131 @@ pipeline_latest <- pipeline %>%
          data_extracted = as.Date(data_extracted, format = "%d/%m/%Y")) %>%
   filter(country == "Myanmar",
          #  Manually enter the date of interest
-         data_extracted == "2021-05-16",
-         period >= "2021-06-01" & period <= "2021-11-30")
-colnames(pipeline)
+         data_extracted == "2021-06-18",
+         period >= "2021-07-01" & period <= "2021-12-31",
+         #  Remove plumpy doz
+         commodity != "Plumpy Doz")
+
+
+
+
+
+glimpse(pipeline_latest) %>%
+  filter(wbs_element != "MM01.08.041.CPA2",
+         transfer_modality == "Food",
+         period == "2021-09-01") %>%
+  group_by(commodity_group) %>%
+  summarise(total = sum(requirements_implementation_plan_resourcing))
+
+unique(pipeline_latest$transfer_modality)
+pipeline_latest %>%
+  filter(transfer_modality == "Service Delivery") %>%
+  select(c(wbs_element, transfer_modality))
 
 
 pipeline_latest <- pipeline_latest %>%
+  filter(wbs_element != "MM01.08.041.CPA2") %>%
   group_by(commodity, transfer_modality, period) %>%
-  summarise(nbp_total_usd = sum(requirements_project_plan_resourcing_fcr),
-            nbp_shortfall_usd = sum(shortfalls_project_plan_resourcing_fcr),
-            nbp_total_mt = sum(requirements_project_plan_resourcing),
-            nbp_shortfall_mt = sum(shortfalls_project_plan_resourcing),
+  summarise(nbp_total_fcr = sum(requirements_project_plan_resourcing_fcr),
+            nbp_shortfall_fcr = sum(shortfalls_project_plan_resourcing_fcr),
+            nbp_total = sum(requirements_project_plan_resourcing),
+            nbp_shortfall = sum(shortfalls_project_plan_resourcing),
             # Add implementation plan
-            ip_total_usd = sum(requirements_implementation_plan_resourcing_fcr),
-            ip_shortfall_usd = sum(shortfalls_implementation_plan_resourcing_fcr),
-            ip_total_mt = sum(requirements_implementation_plan_resourcing),
-            ip_shortfall_mt = sum(shortfalls_implementation_plan_resourcing)) %>%
+            ip_total_fcr = sum(requirements_implementation_plan_resourcing_fcr),
+            ip_shortfall_fcr = sum(shortfalls_implementation_plan_resourcing_fcr),
+            ip_total = sum(requirements_implementation_plan_resourcing),
+            ip_shortfall = sum(shortfalls_implementation_plan_resourcing)) %>%
   # Create contrasting figure for nbp
-  mutate(nbp_funded_usd = nbp_total_usd - nbp_shortfall_usd,
-         nbp_funded_mt = nbp_total_mt - nbp_shortfall_mt,
+  mutate(nbp_funded_fcr = nbp_total_fcr - nbp_shortfall_fcr,
+         nbp_funded = nbp_total - nbp_shortfall,
          # and implementation plan
-         ip_funded_usd = ip_total_usd - ip_shortfall_usd,
-         ip_funded_mt = ip_total_mt - ip_shortfall_mt)
+         ip_funded_fcr = ip_total_fcr - ip_shortfall_fcr,
+         ip_funded = ip_total - ip_shortfall) 
 
 
-pipeline_latest %>% filter(period == "2021-07-01",
-                           transfer_modality == "Food") %>% 
-  select(c(transfer_modality, commodity, ip_total_usd, ip_total_mt, ip_shortfall_usd, ip_shortfall_mt, resourcing_non_fcr)) %>%
-  glimpse()
+# __ e.2) Alternative Pipeline ----
+
+pipeline_rb_extract <- read_excel('C:\\Users\\clinton.tedja\\OneDrive - World Food Programme\\Documents (OneDrive)\\Data\\Myanmar_Situation\\Pipeline_Extract.xlsx', sheet = 'Sheet1')
+
+
+pipeline_rb_extract <- pipeline_rb_extract %>% 
+  mutate(period_date_format = as.Date(period_date_format, origin = "1900-01-01")) %>%
+  filter(recipient_key == "MM",
+         period_date_format >= "2021-07-01" & period_date_format <= "2021-12-31",
+         wbs_element != "MM01.08.041.CPA2") %>%
+  group_by(transfer_item, transfer_modality, period_date_format) %>%
+  summarise(nbp_total_fcr = sum(requirements_nb_plan_resourcing_fcr),
+            nbp_shortfall_fcr = sum(shortfalls_nb_plan_resourcing_fcr),
+            nbp_total = sum(requirements_nb_plan_resourcing),
+            nbp_shortfall = sum(shortfalls_nb_plan_resourcing),
+            # Add implementation plan
+            ip_total_fcr = sum(requirements_impl_plan_resourcing_fcr),
+            ip_shortfall_fcr = sum(shortfalls_impl_plan_resourcing_fcr),
+            ip_total = sum(requirements_impl_plan_resourcing),
+            ip_shortfall = sum(shortfalls_impl_plan_resourcing)) %>%
+  # Create contrasting figure for nbp
+  mutate(nbp_funded_fcr = nbp_total_fcr - nbp_shortfall_fcr,
+         nbp_funded = nbp_total - nbp_shortfall,
+         # and implementation plan
+         ip_funded_fcr = ip_total_fcr - ip_shortfall_fcr,
+         ip_funded = ip_total - ip_shortfall) %>%
+  rename(commodity = transfer_item,
+         period = period_date_format) %>%
+  mutate(transfer_modality = case_when(transfer_modality == "CBT and Commodity Voucher" ~ "C&V",
+                                       TRUE ~ transfer_modality),
+         period = floor_date(period, unit = "months"))
+
+
+pipeline_rb_extract %>% group_by(transfer_modality, period) %>%
+  summarise(total = sum(ip_total_fcr))
+
+# pipeline_latest <- pipeline_rb_extract
+rm(pipeline_rb_extract)
+
+
+
+
+
+# _ g) Supply Chain -----
+
+sc <- read_excel('C:\\Users\\clinton.tedja\\OneDrive - World Food Programme\\Documents (OneDrive)\\Data\\Myanmar_Situation\\myanmar_manual_entry.xlsx', sheet = 'sc')
+colnames(sc)
+
+sc <- sc %>% left_join(geography, by = c("sc_origin" = "adm2_name")) %>%
+  select(c(1:8, "geometry")) %>%
+  left_join(geography, by = c("sc_destination" = "adm2_name")) %>%
+  select(c(1:9, "geometry.y")) %>%
+  mutate(as.vector(as.data.frame(st_coordinates(st_centroid(geometry.x)))["X"]),
+         as.vector(as.data.frame(st_coordinates(st_centroid(geometry.x)))["Y"])) %>%
+  rename(sc_origin_lon = X,
+         sc_origin_lat = Y) %>%
+  mutate(as.vector(as.data.frame(st_coordinates(st_centroid(geometry.y)))["X"]),
+         as.vector(as.data.frame(st_coordinates(st_centroid(geometry.y)))["Y"])) %>%
+  rename(sc_destination_lon = X,
+         sc_destination_lat = Y) %>%
+  select(-c(geometry.y, geometry.x)) %>%
+  pivot_longer(cols = c(sc_destination, sc_origin), 
+               names_to = "sc_cat_location",
+               values_to = "admin2") %>%
+  mutate(sc_cat_location = case_when(sc_cat_location == "sc_destination" ~ "destination",
+                                     sc_cat_location == "sc_origin" ~ "origin",
+                                     TRUE ~ sc_cat_location))
+
+colnames(final_joined)
+
+# Old data structure
+sc <- left_join(sc, geography, by = c("admin2" = "adm2_name")) %>%
+  select(c(admin2, sc_origin_destination, sc_route, geometry)) %>%
+  mutate(as.vector(as.data.frame(st_coordinates(st_centroid(geometry)))["X"]),
+         as.vector(as.data.frame(st_coordinates(st_centroid(geometry)))["Y"])) %>%
+  rename(sc_long = X,
+         sc_lat = Y) %>%
+  select(-c(geometry)) %>%
+  mutate(sc_origin_long = case_when(sc_origin_destination == "Origin" ~ sc_long),
+         sc_origin_lat = case_when(sc_origin_destination == "Origin" ~ sc_lat),
+         sc_desination_long = case_when(sc_origin_destination == "Destination" ~ sc_long),
+         sc_destination_lat = case_when(sc_origin_destination == "Destination" ~ sc_lat)) %>%
+  select(-c(sc_long, sc_lat))
 
 
 
@@ -305,19 +414,40 @@ resourcing <- bind_rows(pipeline_latest, donors, forecast)
 
 
 # Bind all into one data frame
-final_joined <- bind_rows(joined, resourcing) 
+final_joined <- bind_rows(joined, resourcing, sc)
 
 glimpse(final_joined)
+max(conflict$event_date)
 
 
 
 # Write ----
 write_xlsx(as.data.frame(final_joined),
            'C:\\Users\\clinton.tedja\\OneDrive - World Food Programme\\Documents (OneDrive)\\Data\\Myanmar_Situation\\myanmar_situation_prepared_data.xlsx')
+Sys.time()
 
 
 
 
+################################################################
+
+
+
+# Quick EDA chart to map out conflict
+ggplot(filter(conflict, 
+              event_type %in% c("Battles", "Protests", "Explosions/Remote violence")) %>%
+         mutate(event_type = factor(event_type, levels = c("Protests", "Battles", "Explosions/Remote violence"))), 
+       aes(x = event_date, color = event_type, fill = event_type)) + 
+  geom_density(aes(y = ..count..), alpha = 0.6) + 
+  scale_fill_manual(values = (c("#33A977", "#923750", "#EE7449"))) +
+  scale_color_manual(values = (c("#33A977", "#923750", "#EE7449"))) +
+  theme_minimal()
+  
+
+
+
+
+  
 
 # [IGNORE] Formula testing area for myself
 #append_event_date <- seq(as.Date("2021-01-01"), as.Date("2021-05-01"), by = "month")
