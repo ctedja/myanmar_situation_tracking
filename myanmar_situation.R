@@ -19,7 +19,7 @@ library(acled.api)
 # Draw from the ACLED package API: https://CRAN.R-project.org/package=acled.api
 #   Currently a faster refresh than Dots, by two weeks, and allow manual manipulation for preparation
 conflict <- acled.api(email.address = "clinton.tedja@wfp.org",
-                      access.key = "___INSERTOKEN_____",
+                      access.key = "INSERTTOKEN",
                       country = "Myanmar", 
                       start.date = "2021-01-01", 
                       end.date = Sys.Date())
@@ -36,24 +36,6 @@ geography <- read_sf("C:\\Users\\clinton.tedja\\OneDrive - World Food Programme\
 
 #   conflict <- bind_rows(lapply(content(conflict)$data, as.data.frame))
 
-
-
-rm(appended)
-rm(beneficiaries)
-rm(budgeting)
-rm(displaced)
-rm(donors)
-rm(final_joined)
-rm(joined)
-rm(opportunities_donors)
-rm(opportunities_forecast)
-rm(pipeline)
-rm(pipeline_absolute_latest)
-rm(pipeline_latest)
-rm(updates)
-rm(opportunities)
-rm(nmax)
-rm(og_colnames)
 
 
 # Three manual databases
@@ -391,21 +373,6 @@ sc <- sc %>% left_join(geography, by = c("sc_origin" = "adm2_name")) %>%
                                      TRUE ~ sc_cat_location))
 
 colnames(final_joined)
-
-# Old data structure
-sc <- left_join(sc, geography, by = c("admin2" = "adm2_name")) %>%
-  select(c(admin2, sc_origin_destination, sc_route, geometry)) %>%
-  mutate(as.vector(as.data.frame(st_coordinates(st_centroid(geometry)))["X"]),
-         as.vector(as.data.frame(st_coordinates(st_centroid(geometry)))["Y"])) %>%
-  rename(sc_long = X,
-         sc_lat = Y) %>%
-  select(-c(geometry)) %>%
-  mutate(sc_origin_long = case_when(sc_origin_destination == "Origin" ~ sc_long),
-         sc_origin_lat = case_when(sc_origin_destination == "Origin" ~ sc_lat),
-         sc_desination_long = case_when(sc_origin_destination == "Destination" ~ sc_long),
-         sc_destination_lat = case_when(sc_origin_destination == "Destination" ~ sc_lat)) %>%
-  select(-c(sc_long, sc_lat))
-
 
 
 # Join & Bind pt.2 ----
