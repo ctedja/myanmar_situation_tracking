@@ -19,7 +19,7 @@ library(acled.api)
 # Draw from the ACLED package API: https://CRAN.R-project.org/package=acled.api
 #   Currently a faster refresh than Dots, by two weeks, and allow manual manipulation for preparation
 conflict <- acled.api(email.address = "clinton.tedja@wfp.org",
-                      access.key = "INSERTTOKEN",
+                      access.key = "___TOKEN____",
                       country = "Myanmar", 
                       start.date = "2021-01-01", 
                       end.date = Sys.Date())
@@ -35,7 +35,6 @@ geography <- read_sf("C:\\Users\\clinton.tedja\\OneDrive - World Food Programme\
 #   conflict <- GET("https://api.acleddata.com/acled/read/?key=nrSMy2xwZwCbaaMfXW2W&email=clinton.tedja@wfp.org&terms=accept&year=2021&country=Myanmar&limit=10000")
 
 #   conflict <- bind_rows(lapply(content(conflict)$data, as.data.frame))
-
 
 
 # Three manual databases
@@ -343,19 +342,18 @@ pipeline_rb_extract %>% group_by(transfer_modality, period) %>%
 # pipeline_latest <- pipeline_rb_extract
 rm(pipeline_rb_extract)
 
-
+20*30*3
 
 
 
 # _ g) Supply Chain -----
 
 sc <- read_excel('C:\\Users\\clinton.tedja\\OneDrive - World Food Programme\\Documents (OneDrive)\\Data\\Myanmar_Situation\\myanmar_manual_entry.xlsx', sheet = 'sc')
-colnames(sc)
 
 sc <- sc %>% left_join(geography, by = c("sc_origin" = "adm2_name")) %>%
-  select(c(1:8, "geometry")) %>%
+  select(c(1:9, "geometry")) %>%
   left_join(geography, by = c("sc_destination" = "adm2_name")) %>%
-  select(c(1:9, "geometry.y")) %>%
+  select(c(1:10, "geometry.y")) %>%
   mutate(as.vector(as.data.frame(st_coordinates(st_centroid(geometry.x)))["X"]),
          as.vector(as.data.frame(st_coordinates(st_centroid(geometry.x)))["Y"])) %>%
   rename(sc_origin_lon = X,
@@ -370,9 +368,17 @@ sc <- sc %>% left_join(geography, by = c("sc_origin" = "adm2_name")) %>%
                values_to = "admin2") %>%
   mutate(sc_cat_location = case_when(sc_cat_location == "sc_destination" ~ "destination",
                                      sc_cat_location == "sc_origin" ~ "origin",
-                                     TRUE ~ sc_cat_location))
+                                     TRUE ~ sc_cat_location)) %>%
+  mutate(sc_label = case_when(sc_cat_location == "origin" ~ sc_origin_label,
+                              sc_cat_location == "destination" ~ sc_destination_label)) %>%
+  select(-c(sc_origin_label, sc_destination_label)) %>%
+  mutate(sc_partners = case_when(sc_cat_location == "destination" ~ sc_partners),
+         sc_quantity_mt = case_when(sc_cat_location == "destination" ~ sc_quantity_mt),
+         sc_status = case_when(sc_cat_location == "destination" ~ sc_status),
+         sc_population = case_when(sc_cat_location == "destination" ~ sc_population))
 
-colnames(final_joined)
+
+
 
 
 # Join & Bind pt.2 ----
@@ -387,7 +393,6 @@ glimpse(final_joined)
 max(conflict$event_date)
 
 
-
 # Write ----
 write_xlsx(as.data.frame(final_joined),
            'C:\\Users\\clinton.tedja\\OneDrive - World Food Programme\\Documents (OneDrive)\\Data\\Myanmar_Situation\\myanmar_situation_prepared_data.xlsx')
@@ -400,7 +405,7 @@ Sys.time()
 
 
 
-# Quick EDA chart to map out conflict
+# Quick EDA charts and calculations to map out conflict
 ggplot(filter(conflict, 
               event_type %in% c("Battles", "Protests", "Explosions/Remote violence")) %>%
          mutate(event_type = factor(event_type, levels = c("Protests", "Battles", "Explosions/Remote violence"))), 
@@ -409,11 +414,19 @@ ggplot(filter(conflict,
   scale_fill_manual(values = (c("#33A977", "#923750", "#EE7449"))) +
   scale_color_manual(values = (c("#33A977", "#923750", "#EE7449"))) +
   theme_minimal()
-  
 
 
+conflict %>% mutate(month_str = factor(month_str, levels = c("January", "February", "March", "April", "May", "June", "July", "Cumulative"))) %>%
+  group_by(month_str) %>%
+  summarise(fatalities = sum(fatalities))
 
+conflict %>% mutate(month_str = factor(month_str, levels = c("January", "February", "March", "April", "May", "June", "July", "Cumulative"))) %>% 
+  group_by(month_str, event_type) %>%
+  summarise(n_events = length(unique(ID))) %>% View()
 
+conflict %>% mutate(month_str = factor(month_str, levels = c("January", "February", "March", "April", "May", "June", "July", "Cumulative"))) %>% 
+  group_by(month_str) %>%
+  summarise(n_events = length(unique(ID))) 
   
 
 # [IGNORE] Formula testing area for myself
