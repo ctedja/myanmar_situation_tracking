@@ -13,13 +13,11 @@ library(acled.api)
 
 
 
-
-
 # Load ----
 # Draw from the ACLED package API: https://CRAN.R-project.org/package=acled.api
 #   Currently a faster refresh than Dots, by two weeks, and allow manual manipulation for preparation
 conflict <- acled.api(email.address = "clinton.tedja@wfp.org",
-                      access.key = "___TOKEN____",
+                      access.key = "__TOKEN__",
                       country = "Myanmar", 
                       start.date = "2021-01-01", 
                       end.date = Sys.Date())
@@ -30,9 +28,6 @@ geography <- read_sf("C:\\Users\\clinton.tedja\\OneDrive - World Food Programme\
   filter(iso3 == "MMR") %>%
   select(-c(source, source_id, source_dat, lst_update, rb))
 
-# Alternative API workflow
-#   library(acled.api)
-#   conflict <- GET("https://api.acleddata.com/acled/read/?key=nrSMy2xwZwCbaaMfXW2W&email=clinton.tedja@wfp.org&terms=accept&year=2021&country=Myanmar&limit=10000")
 
 #   conflict <- bind_rows(lapply(content(conflict)$data, as.data.frame))
 
@@ -161,7 +156,7 @@ joined <- conflict %>%
   select(-c(admin1, region, country, year, displaced_adm1, update_adm_1, ben_admin_1, timestamp))
 
 
-# This cheap hacky workaround is just in order to ensure that we have no missing admin2 names for some months in the dashboard
+# This cheap hacky workaround is just in order to ensure that we have no missing admin2 names for some months in the dashboard (because we're using months as discrete strings to allow for cumulative)
 appended <- bind_rows(
   data.frame(event_date = as.Date("2021-01-01"), 
              admin2 = unique(geography$adm2_name),
@@ -181,6 +176,9 @@ appended <- bind_rows(
   data.frame(event_date = as.Date("2021-06-01"), 
              admin2 = unique(geography$adm2_name),
              month_str = "June"),
+  data.frame(event_date = as.Date("2021-07-01"), 
+             admin2 = unique(geography$adm2_name),
+             month_str = "July"),
   data.frame(event_date = NA, 
              admin2 = unique(geography$adm2_name),
              month_str = "Cumulative")) %>% 
@@ -202,13 +200,17 @@ joined <- bind_rows(joined, appended)
 # Tableau Server file for now
 #pipeline <- read.csv('C:\\Users\\clinton.tedja\\OneDrive - World Food Programme\\Documents (OneDrive)\\Data\\Myanmar_Situation\\Pipeline.csv')
 
-pipeline <- read.csv('C:\\Users\\clinton.tedja\\OneDrive - World Food Programme\\Documents (OneDrive)\\Data\\Myanmar_Situation\\Pipeline_210622.csv')
+pipeline <- read.csv('C:\\Users\\clinton.tedja\\OneDrive - World Food Programme\\Documents (OneDrive)\\Data\\Myanmar_Situation\\Resourcing_Pipeline_210721.csv')
+
+pipeline <- read.csv('C:\\Users\\clinton.tedja\\OneDrive - World Food Programme\\Documents (OneDrive)\\Data\\Myanmar_Situation\\test.csv')
+
+
 
 # Dots for now
-forecast <- read.csv('C:\\Users\\clinton.tedja\\OneDrive - World Food Programme\\Documents (OneDrive)\\Data\\Myanmar_Situation\\Opportunities_210617.csv')
+forecast <- read.csv('C:\\Users\\clinton.tedja\\OneDrive - World Food Programme\\Documents (OneDrive)\\Data\\Myanmar_Situation\\Resourcing_Opportunities_210721.csv')
 
 # Contributions by donor, Dots for now
-donors <- read.csv('C:\\Users\\clinton.tedja\\OneDrive - World Food Programme\\Documents (OneDrive)\\Data\\Myanmar_Situation\\Confirmed_Contributions.csv')
+donors <- read.csv('C:\\Users\\clinton.tedja\\OneDrive - World Food Programme\\Documents (OneDrive)\\Data\\Myanmar_Situation\\Resourcing_Confirmed_Contributions.csv')
 
 
 
@@ -219,9 +221,6 @@ forecast <- forecast %>%
          Forecast_Or_Contribution == "Forecast")%>%
   summarise(forecast = sum(Total_Value_USD))
 
-
-# Manual overwrite for June
-forecast <- data.frame(forecast = c("13700000"))
 
 
 
@@ -247,13 +246,13 @@ donors <- donors %>%
 unique(arrange(pipeline %>% mutate(data_extracted = as.Date(data_extracted, format = "%d/%m/%Y")), data_extracted)$data_extracted)
 
 
-
 # Generate the absolute latest
 pipeline_absolute_latest <- pipeline %>%
   mutate(period = as.Date(period, format = "%d/%m/%Y")) %>%
   filter(country == "Myanmar",
          latest_data == "x",
          period >= "2021-06-01" & period <= "2021-11-30")
+rm(pipeline_absolute_latest)
 
 # Generate the specific version of interest
 pipeline_latest <- pipeline %>%
@@ -261,26 +260,12 @@ pipeline_latest <- pipeline %>%
          data_extracted = as.Date(data_extracted, format = "%d/%m/%Y")) %>%
   filter(country == "Myanmar",
          #  Manually enter the date of interest
-         data_extracted == "2021-06-18",
-         period >= "2021-07-01" & period <= "2021-12-31",
+         data_extracted == "2021-07-19",
+         period >= "2021-08-01" & period <= "2022-01-31",
          #  Remove plumpy doz
          commodity != "Plumpy Doz")
 
 
-
-
-
-glimpse(pipeline_latest) %>%
-  filter(wbs_element != "MM01.08.041.CPA2",
-         transfer_modality == "Food",
-         period == "2021-09-01") %>%
-  group_by(commodity_group) %>%
-  summarise(total = sum(requirements_implementation_plan_resourcing))
-
-unique(pipeline_latest$transfer_modality)
-pipeline_latest %>%
-  filter(transfer_modality == "Service Delivery") %>%
-  select(c(wbs_element, transfer_modality))
 
 
 pipeline_latest <- pipeline_latest %>%
@@ -304,7 +289,6 @@ pipeline_latest <- pipeline_latest %>%
 
 
 # __ e.2) Alternative Pipeline ----
-
 pipeline_rb_extract <- read_excel('C:\\Users\\clinton.tedja\\OneDrive - World Food Programme\\Documents (OneDrive)\\Data\\Myanmar_Situation\\Pipeline_Extract.xlsx', sheet = 'Sheet1')
 
 
@@ -341,8 +325,6 @@ pipeline_rb_extract %>% group_by(transfer_modality, period) %>%
 
 # pipeline_latest <- pipeline_rb_extract
 rm(pipeline_rb_extract)
-
-20*30*3
 
 
 
@@ -400,7 +382,6 @@ Sys.time()
 
 
 
-
 ################################################################
 
 
@@ -426,7 +407,7 @@ conflict %>% mutate(month_str = factor(month_str, levels = c("January", "Februar
 
 conflict %>% mutate(month_str = factor(month_str, levels = c("January", "February", "March", "April", "May", "June", "July", "Cumulative"))) %>% 
   group_by(month_str) %>%
-  summarise(n_events = length(unique(ID))) 
+  summarise(n_events = length(unique(ID)))
   
 
 # [IGNORE] Formula testing area for myself
