@@ -1,4 +1,4 @@
-# myanmar_situation_tracking 
+# Myanmar Operations and Situation Tracking Dashboard
 
 An R script to automate the join and manipulation of multiple datasets at subnational (adm2) level for situation tracking and operational analysis in Myanmar, following the events of 1 February 2021. Uploaded to track changes.
 
